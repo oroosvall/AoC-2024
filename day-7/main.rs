@@ -81,11 +81,11 @@ fn main() -> Result<(), Error> {
 
     now = Instant::now();
     let r1 = part_1(&input);
-    println!("Part 1: {} µs", now.elapsed().as_micros());
+    println!("Part 1: {} ms", now.elapsed().as_millis());
 
     now = Instant::now();
     let r2 = part_2(&input);
-    println!("Part 2: {} µs", now.elapsed().as_micros());
+    println!("Part 2: {} ms", now.elapsed().as_millis());
 
     println!("Result 1: {}\nResult 2: {}", r1, r2);
 
