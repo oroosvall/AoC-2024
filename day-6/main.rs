@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error, Read};
 use std::time::Instant;
@@ -22,6 +23,24 @@ fn to_idx(x: i32, y: i32, s: i32) -> i32 {
     (y * s) + x
 }
 
+fn get_dir(d: Dir) -> (i32, i32) {
+    match d {
+        Dir::Up => (0, -1),
+        Dir::Right => (1, 0),
+        Dir::Down => (0, 1),
+        Dir::Left => (-1, 0),
+    }
+}
+
+fn next_dir(d: Dir) -> Dir {
+    match d {
+        Dir::Up => Dir::Right,
+        Dir::Right => Dir::Down,
+        Dir::Down => Dir::Left,
+        Dir::Left => Dir::Up,
+    }
+}
+
 fn do_moves(d: (i32, Dir), x_size: i32, y_size: i32, g: &mut str) -> i32 {
     let s_bytes: &mut [u8] = unsafe { g.as_bytes_mut() };
 
@@ -32,46 +51,20 @@ fn do_moves(d: (i32, Dir), x_size: i32, y_size: i32, g: &mut str) -> i32 {
     loop {
         s_bytes[to_idx(px, py, x_size) as usize] = 'X' as u8;
 
-        match dir {
-            Dir::Up => {
-                py -= 1;
-                if py == -1 {
-                    break;
-                } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
-                    py += 1; // restore
-                    dir = Dir::Right;
-                }
-            }
-            Dir::Right => {
-                px += 1;
-                if px == x_size {
-                    break;
-                } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
-                    px -= 1; // restore
-                    dir = Dir::Down;
-                }
-            }
-            Dir::Down => {
-                py += 1;
-                if py == y_size {
-                    break;
-                } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
-                    py -= 1; // restore
-                    dir = Dir::Left;
-                }
-            }
-            Dir::Left => {
-                px -= 1;
-                if px == -1 {
-                    break;
-                } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
-                    px += 1; // restore
-                    dir = Dir::Up;
-                }
-            }
-        };
+        let mv = get_dir(dir.clone());
+
+        px += mv.0;
+        py += mv.1;
+
+        if py == -1 || px == -1 || px == x_size || py == y_size {
+            break;
+        } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
+            px -= mv.0;
+            py -= mv.1;
+            dir = next_dir(dir.clone());
+        }
     }
-    g.chars().filter(|c| *c == 'X' || *c == 'O').count() as i32
+    g.chars().filter(|c| *c == 'X').count() as i32
 }
 
 fn part_1(v: &Vec<String>) -> i32 {
@@ -88,109 +81,53 @@ fn part_1(v: &Vec<String>) -> i32 {
 }
 
 fn find_loops(d: (i32, Dir), x_size: i32, y_size: i32, g: &mut str) -> i32 {
+
+    let binding = String::from(&mut *g);
+    let path = binding.match_indices("X");
+
     let s_bytes: &mut [u8] = unsafe { g.as_bytes_mut() };
 
-    let mut px = d.0 % x_size;
-    let mut py = d.0 / x_size;
-    let mut dir = d.1;
-
-    let mut f_obj = (-1, -1, dir.clone());
     let mut nr_loops = 0;
 
-    let mut moves: HashMap<i32, Dir> = HashMap::new();
+    for (f_pos, _) in path {
 
-    loop {
-        let mut reset = false;
-
-        let pidx = to_idx(px, py, x_size);
-        if let Some(d) = moves.get(&pidx) {
-            if *d == dir {
-                // println!("{}, {} -> n turns: {}", py, px, nturn - f_obj.3);
-                nr_loops += 1;
-                reset = true;
-            }
-        } else {
-            moves.insert(pidx, dir.clone());
+        if f_pos == d.0 as usize {
+            continue;
         }
 
-        match dir {
-            Dir::Up => {
-                py -= 1;
-                if py == -1 {
-                    if f_obj.0 != -1 {
-                        reset = true;
-                    } else {
-                        break;
-                    }
-                } else if f_obj.0 == -1 && s_bytes[to_idx(px, py, x_size) as usize] != '#' as u8 {
-                    f_obj = (px, py, dir.clone());
-                    py += 1; // restore
-                    dir = Dir::Right;
-                } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
-                    py += 1; // restore
-                    dir = Dir::Right;
-                }
-            }
-            Dir::Right => {
-                px += 1;
-                if px == x_size {
-                    if f_obj.0 != -1 {
-                        reset = true;
-                    } else {
-                        break;
-                    }
-                } else if f_obj.0 == -1 && s_bytes[to_idx(px, py, x_size) as usize] != '#' as u8 {
-                    f_obj = (px, py, dir.clone());
-                    px -= 1; // restore
-                    dir = Dir::Down;
-                } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
-                    px -= 1; // restore
-                    dir = Dir::Down;
-                }
-            }
-            Dir::Down => {
-                py += 1;
-                if py == y_size {
-                    if f_obj.0 != -1 {
-                        reset = true;
-                    } else {
-                        break;
-                    }
-                } else if f_obj.0 == -1 && s_bytes[to_idx(px, py, x_size) as usize] != '#' as u8 {
-                    f_obj = (px, py, dir.clone());
-                    py -= 1; // restore
-                    dir = Dir::Left;
-                } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
-                    py -= 1; // restore
-                    dir = Dir::Left;
-                }
-            }
-            Dir::Left => {
-                px -= 1;
-                if px == -1 {
-                    if f_obj.0 != -1 {
-                        reset = true;
-                    } else {
-                        break;
-                    }
-                } else if f_obj.0 == -1 && s_bytes[to_idx(px, py, x_size) as usize] != '#' as u8 {
-                    f_obj = (px, py, dir.clone());
-                    px += 1; // restore
-                    dir = Dir::Up;
-                } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
-                    px += 1; // restore
-                    dir = Dir::Up;
-                }
-            }
-        };
+        let mut px = d.0 % x_size;
+        let mut py = d.0 / x_size;
+        let mut dir = d.1.clone();
 
-        if reset {
-            px = f_obj.0;
-            py = f_obj.1;
-            dir = f_obj.2.clone();
-            f_obj = (-1, -1, dir.clone());
-            moves = HashMap::new();
+        s_bytes[f_pos] = '#' as u8;
+        let mut moves: HashMap<i32, Dir> = HashMap::new();
+
+        loop {
+
+            let pidx = to_idx(px, py, x_size);
+            if let Some(d) = moves.get(&pidx) {
+                if *d == dir {
+                    nr_loops += 1;
+                    break;
+                }
+            } else {
+                moves.insert(pidx, dir.clone());
+            }
+
+            let mv = get_dir(dir.clone());
+
+            px += mv.0;
+            py += mv.1;
+
+            if py == -1 || px == -1 || px == x_size || py == y_size {
+                break;
+            } else if s_bytes[to_idx(px, py, x_size) as usize] == '#' as u8 {
+                px -= mv.0;
+                py -= mv.1;
+                dir = next_dir(dir.clone());
+            }
         }
+        s_bytes[f_pos] = '.' as u8;
     }
     nr_loops
 }
@@ -205,6 +142,7 @@ fn part_2(v: &Vec<String>) -> i32 {
 
     let idx = g.find('^').unwrap() as i32;
 
+    do_moves((idx, Dir::Up), x, y, &mut g);
     find_loops((idx, Dir::Up), x, y, &mut g)
 }
 
@@ -219,7 +157,7 @@ fn main() -> Result<(), Error> {
 
     now = Instant::now();
     let r2 = part_2(&input);
-    println!("Part 2: {} µs", now.elapsed().as_micros());
+    println!("Part 2: {} ms", now.elapsed().as_millis());
 
     println!("Result 1: {}\nResult 2: {}", r1, r2);
 
